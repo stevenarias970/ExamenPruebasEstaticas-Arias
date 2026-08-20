@@ -1,0 +1,10 @@
+{
+  "name": "inventario-js",
+  "version": "1.0.0",
+  "description": "Proyecto de practica para el Laboratorio de Pruebas Estaticas (SonarCloud). Contiene defectos intencionales.",
+  "main": "inventario.js",
+  "scripts": {
+    "test": "echo \"Este proyecto no tiene pruebas unitarias, es solo para analisis estatico\""
+  },
+  "license": "MIT"
+}
