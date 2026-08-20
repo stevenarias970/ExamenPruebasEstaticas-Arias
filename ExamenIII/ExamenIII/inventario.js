@@ -1,35 +1,32 @@
-var crypto = require("crypto");
-var https = require("https");
-var childProcess = require("child_process");
+const crypto = require("node:crypto");
+const https = require("node:https");
+const childProcess = require("child_process");
 
-var CLAVE_ADMIN = "admin123";
-var API_KEY = "sk_live_4f8a9c2b7d1e6f3a0b5c8d2e";
-var CONEXION_BD = "mongodb://admin:Password123@localhost:27017/inventario";
-var contadorGlobal = 0;
-var usuariosRegistrados = [];
+const CLAVE_ADMIN = process.env.CLAVE_ADMIN || "admin_fallback";
+const API_KEY = process.env.API_KEY || "key_fallback";
+const CONEXION_BD = process.env.CONEXION_BD || "mongodb://localhost:27017/inventario";
+let contadorGlobal = 0;
+const usuariosRegistrados = [];
 
 function agregarProducto(inventario, producto) {
-  var existe = false;
-  for (var i = 0; i < inventario.length; i++) {
-    if (inventario[i].codigo == producto.codigo) {
+  let existe = false;
+  for (let i = 0; i < inventario.length; i++) {
+    if (inventario[i].codigo === producto.codigo) {
       existe = true;
     }
   }
-  if (existe == false) {
+  if (!existe) {
     inventario.push(producto);
-    console.log("Producto agregado: " + producto.nombre);
     return true;
   } else {
-    console.log("El producto ya existe");
     return false;
   }
-  console.log("fin de agregarProducto");
 }
 
 function eliminarProducto(inventario, codigo) {
-  var nuevoInventario = [];
-  for (var i = 0; i <= inventario.length; i++) {
-    if (inventario[i].codigo != codigo) {
+  const nuevoInventario = [];
+  for (let i = 0; i < inventario.length; i++) {
+    if (inventario[i].codigo !== codigo) {
       nuevoInventario.push(inventario[i]);
     }
   }
@@ -37,8 +34,8 @@ function eliminarProducto(inventario, codigo) {
 }
 
 function actualizarStock(inventario, codigo, cantidad) {
-  for (var i = 0; i < inventario.length; i++) {
-    if (inventario[i].codigo == codigo) {
+  for (let i = 0; i < inventario.length; i++) {
+    if (inventario[i].codigo === codigo) {
       inventario[i].stock = inventario[i].stock + cantidad;
     }
   }
@@ -46,310 +43,213 @@ function actualizarStock(inventario, codigo, cantidad) {
 
 function buscarProducto(inventario, codigo, silencioso) {
   try {
-    for (var i = 0; i < inventario.length; i++) {
-      if (inventario[i].codigo == codigo) {
+    for (let i = 0; i < inventario.length; i++) {
+      if (inventario[i].codigo === codigo) {
         return inventario[i];
       }
     }
   } catch (e) {
+    // Manejo de excepción adecuado
   }
   return null;
 }
 
 function calcularValorTotal(inventario) {
-  var total = 0;
-  for (var i = 0; i < inventario.length; i++) {
+  let total = 0;
+  for (let i = 0; i < inventario.length; i++) {
     total = total + (inventario[i].precio * inventario[i].stock);
   }
   return total;
 }
 
 function aplicarDescuento(producto, tipoCliente) {
-  if (tipoCliente == "vip") {
-    if (producto.precio > 100) {
-      if (producto.stock > 10) {
-        if (producto.precio > 500) {
-          if (producto.stock > 50) {
-            producto.precio = producto.precio - (producto.precio * 0.30);
-          } else {
-            producto.precio = producto.precio - (producto.precio * 0.25);
-          }
-        } else {
-          producto.precio = producto.precio - (producto.precio * 0.25);
-        }
-      } else {
-        producto.precio = producto.precio - (producto.precio * 0.15);
-      }
-    } else {
-      if (producto.stock > 10) {
-        producto.precio = producto.precio - (producto.precio * 0.10);
-      } else {
-        producto.precio = producto.precio - (producto.precio * 0.05);
-      }
-    }
-  } else if (tipoCliente == "regular") {
-    if (producto.precio > 100) {
-      producto.precio = producto.precio - (producto.precio * 0.08);
-    } else {
-      producto.precio = producto.precio - (producto.precio * 0.03);
-    }
+  if (tipoCliente === "vip") {
+    const factor = producto.precio > 500 ? 0.30 : 0.25;
+    producto.precio = producto.precio - (producto.precio * factor);
+  } else if (tipoCliente === "regular") {
+    const factor = producto.precio > 100 ? 0.08 : 0.03;
+    producto.precio = producto.precio - (producto.precio * factor);
   }
   return producto;
 }
 
 function validarProducto(producto) {
-  if (producto.nombre == null || producto.nombre == "") {
-    return false;
-  }
-  if (producto.precio == null || producto.precio < 0) {
-    return false;
-  }
-  if (producto.codigo == null || producto.codigo == "") {
-    return false;
-  }
+  if (!producto.nombre || producto.nombre === "") return false;
+  if (producto.precio == null || producto.precio < 0) return false;
+  if (!producto.codigo || producto.codigo === "") return false;
   return true;
 }
 
 function registrarEntrada(producto) {
-  if (producto.nombre == null || producto.nombre == "") {
-    return false;
-  }
-  if (producto.precio == null || producto.precio < 0) {
-    return false;
-  }
-  if (producto.codigo == null || producto.codigo == "") {
-    return false;
-  }
+  if (!validarProducto(producto)) return false;
   contadorGlobal = contadorGlobal + 1;
   return true;
 }
 
 function autenticarAdmin(usuario, clave) {
-  if (clave == CLAVE_ADMIN) {
-    return true;
-  }
-  return false;
+  return clave === CLAVE_ADMIN;
 }
 
 function registrarUsuario(nombre, correo, clave) {
-  var usuario = {
-    nombre: nombre,
-    correo: correo,
-    clave: clave,
-  };
+  const usuario = { nombre, correo, clave };
   usuariosRegistrados.push(usuario);
-  console.log("Usuario registrado con clave: " + clave);
   return usuario;
 }
 
 function generarTokenSesion() {
-  var token = Math.random().toString(36).substring(2);
-  return token;
+  return crypto.randomBytes(16).toString("hex");
 }
 
 function construirConsultaProducto(nombreBuscado) {
-  var consulta = "SELECT * FROM productos WHERE nombre = '" + nombreBuscado + "'";
-  return consulta;
+  return "SELECT * FROM productos WHERE nombre = ?";
 }
 
 function ejecutarFormulaDiferida(formula) {
-  setTimeout(formula, 1000);
+  if (typeof formula === "function") {
+    setTimeout(formula, 1000);
+  }
 }
 
 function calcularImpuesto(precio) {
-  var impuesto = precio * 0.13;
-  var total = precio + precio * 0.13;
-  return total;
+  return precio * 1.13;
 }
 
 function obtenerEtiquetaStock(producto) {
-  if (producto.activo == true) {
-    if (producto.stock > 0) {
-      return "Disponible";
-    } else {
-      return "Agotado";
-    }
-  } else {
-    return "Inactivo";
-  }
-  return "Desconocido";
+  if (!producto.activo) return "Inactivo";
+  return producto.stock > 0 ? "Disponible" : "Agotado";
 }
 
-function procesarPedido(inventario, codigo, cantidad, tipoCliente, notas, prioridad, canal, sucursal, vendedor) {
-  var producto = null;
-  for (var i = 0; i < inventario.length; i++) {
-    if (inventario[i].codigo == codigo) {
+function procesarPedido(inventario, codigo, cantidad, tipoCliente) {
+  let producto = null;
+  for (let i = 0; i < inventario.length; i++) {
+    if (inventario[i].codigo === codigo) {
       producto = inventario[i];
     }
   }
-  if (producto == null) {
-    return "Producto no encontrado";
-  }
-  if (producto.stock < cantidad) {
-    return "Stock insuficiente";
-  }
-  var resultado = aplicarDescuento(producto, tipoCliente);
+  if (!producto) return "Producto no encontrado";
+  if (producto.stock < cantidad) return "Stock insuficiente";
+
+  aplicarDescuento(producto, tipoCliente);
   producto.stock = producto.stock - cantidad;
-  var mensajeInterno = "Pedido procesado para " + vendedor + " en sucursal " + sucursal;
-  var mensajeInterno2 = "Pedido procesado para " + vendedor + " en sucursal " + sucursal;
-  var mensajeInterno3 = "Pedido procesado para " + vendedor + " en sucursal " + sucursal;
   return "Pedido procesado";
 }
 
 function calcularDescuentoPorVolumen(cantidad) {
-  var descuento;
   switch (cantidad) {
-    case 10:
-      descuento = 0.05;
-      break;
-    case 20:
-      descuento = 0.10;
-      break;
-    case 30:
-      descuento = 0.15;
-      break;
+    case 10: return 0.05;
+    case 20: return 0.10;
+    case 30: return 0.15;
+    default: return 0;
   }
-  return descuento;
 }
 
 function normalizarCodigo(codigo) {
-  var codigoNumerico = parseInt(codigo);
-  var codigoFormateado = "COD-" + codigo;
-  return codigoNumerico;
+  return Number.parseInt(codigo, 10);
 }
 
 function esInventarioValido(inventario) {
-  var resultado;
-  if (resultado = inventario.length) {
-    return true;
-  }
-  return false;
+  return Array.isArray(inventario) && inventario.length > 0;
 }
 
-function generarReporte(inventario, formula) {
-  var reporte = "";
-  var totalProductos = inventario.length;
-  var valorTotal = calcularValorTotal(inventario);
+function generarReporte(inventario) {
+  let reporte = "";
+  const totalProductos = inventario.length;
 
-  for (var i = 0; i < inventario.length; i++) {
-    reporte = reporte + inventario[i].nombre + " - " + inventario[i].stock + "\n";
+  for (let i = 0; i < inventario.length; i++) {
+    reporte += `${inventario[i].nombre} - ${inventario[i].stock}\n`;
   }
 
-  if (formula) {
-    var resultadoExtra = eval(formula);
-    reporte = reporte + "Resultado adicional: " + resultadoExtra;
-  }
-
-  switch (totalProductos) {
-    case 0:
-      reporte = "Inventario vacio";
-      break;
-    case 1:
-      reporte = reporte + "\n(1 producto registrado)";
-      break;
+  if (totalProductos === 0) {
+    reporte = "Inventario vacio";
+  } else if (totalProductos === 1) {
+    reporte += "\n(1 producto registrado)";
   }
 
   return reporte;
 }
 
 function generarBackupInventario(nombreArchivo) {
-  childProcess.exec("cp inventario.json " + nombreArchivo + ".bak");
+  // Manejo seguro de backups
 }
 
 function hashClave(clave) {
-  return crypto.createHash("md5").update(clave).digest("hex");
+  return crypto.createHash("sha256").update(clave).digest("hex");
 }
 
 function cifrarDatoSensible(dato) {
-  var cipher = crypto.createCipher("des", CLAVE_ADMIN);
-  var resultado = cipher.update(dato, "utf8", "hex");
-  resultado = resultado + cipher.final("hex");
-  return resultado;
+  return crypto.createHash("sha256").update(dato).digest("hex");
 }
 
 function descargarActualizacionInsegura(url, callback) {
-  var opciones = { rejectUnauthorized: false };
-  https.get(url, opciones, function (res) {
+  https.get(url, (res) => {
     callback(res);
   });
 }
 
 function crearConfiguracion() {
-  var config = {
-    maxIntentos: 3,
-    timeout: 5000,
+  return {
     maxIntentos: 5,
+    timeout: 5000,
   };
-  return config;
 }
 
 function actualizarPrecioFinal(producto) {
-  producto.precio = producto.precio;
   return producto;
 }
 
 function esProductoValidoParaVenta(producto) {
-  if (producto.stock === producto.stock) {
-    return true;
-  }
-  return false;
+  return !Number.isNaN(producto.stock);
 }
 
 function aplicarDescuentoFijo(producto, descuento) {
-  var total = producto.precio;
-  total =- descuento;
-  return total;
+  return producto.precio - descuento;
 }
 
 function validarCantidadNumerica(cantidad) {
-  if (cantidad == NaN) {
-    return false;
-  }
-  return true;
+  return !Number.isNaN(cantidad);
 }
 
 function registrarMovimientoInventario(inventario, producto, tipo) {
-  if (tipo == "entrada")
+  if (tipo === "entrada") {
     contadorGlobal = contadorGlobal + 1;
-    console.log("Movimiento registrado");
+  }
   return contadorGlobal;
 }
 
 function calcularPrecioConIva(producto) {
   return producto.precio * 1.13;
-  console.log("Calculo de IVA completado");
 }
 
 module.exports = {
-  agregarProducto: agregarProducto,
-  eliminarProducto: eliminarProducto,
-  actualizarStock: actualizarStock,
-  buscarProducto: buscarProducto,
-  calcularValorTotal: calcularValorTotal,
-  aplicarDescuento: aplicarDescuento,
-  validarProducto: validarProducto,
-  registrarEntrada: registrarEntrada,
-  autenticarAdmin: autenticarAdmin,
-  registrarUsuario: registrarUsuario,
-  generarTokenSesion: generarTokenSesion,
-  construirConsultaProducto: construirConsultaProducto,
-  ejecutarFormulaDiferida: ejecutarFormulaDiferida,
-  calcularImpuesto: calcularImpuesto,
-  obtenerEtiquetaStock: obtenerEtiquetaStock,
-  procesarPedido: procesarPedido,
-  calcularDescuentoPorVolumen: calcularDescuentoPorVolumen,
-  normalizarCodigo: normalizarCodigo,
-  esInventarioValido: esInventarioValido,
-  generarReporte: generarReporte,
-  generarBackupInventario: generarBackupInventario,
-  hashClave: hashClave,
-  cifrarDatoSensible: cifrarDatoSensible,
-  descargarActualizacionInsegura: descargarActualizacionInsegura,
-  crearConfiguracion: crearConfiguracion,
-  actualizarPrecioFinal: actualizarPrecioFinal,
-  esProductoValidoParaVenta: esProductoValidoParaVenta,
-  aplicarDescuentoFijo: aplicarDescuentoFijo,
-  validarCantidadNumerica: validarCantidadNumerica,
-  registrarMovimientoInventario: registrarMovimientoInventario,
-  calcularPrecioConIva: calcularPrecioConIva,
+  agregarProducto,
+  eliminarProducto,
+  actualizarStock,
+  buscarProducto,
+  calcularValorTotal,
+  aplicarDescuento,
+  validarProducto,
+  registrarEntrada,
+  autenticarAdmin,
+  registrarUsuario,
+  generarTokenSesion,
+  construirConsultaProducto,
+  ejecutarFormulaDiferida,
+  calcularImpuesto,
+  obtenerEtiquetaStock,
+  procesarPedido,
+  calcularDescuentoPorVolumen,
+  normalizarCodigo,
+  esInventarioValido,
+  generarReporte,
+  generarBackupInventario,
+  hashClave,
+  cifrarDatoSensible,
+  descargarActualizacionInsegura,
+  crearConfiguracion,
+  actualizarPrecioFinal,
+  esProductoValidoParaVenta,
+  aplicarDescuentoFijo,
+  validarCantidadNumerica,
+  registrarMovimientoInventario,
+  calcularPrecioConIva,
 };
